@@ -10,7 +10,12 @@ const DATA_FILE = path.join(__dirname, "data", "rsvps.json")
 // CORS Middleware - MUSS VOR allen anderen Middlewares kommen!
 app.use(
   cors({
-    origin: ["http://localhost:3000", "http://localhost:3001"],
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "https://sarahiver.de", // DEINE echte Domain!
+      "https://www.sarahiver.de", // Mit www
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
