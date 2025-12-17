@@ -94,12 +94,34 @@ app.post("/api/admin/login", (req, res) => {
   console.log("🔐 Login-Versuch:", username)
 
   // WICHTIG: Ändere diese Credentials vor dem Deployment!
-  if (username === "admin" && password === "wedding2026") {
+  if (username === "Sarover" && password === "wedding2026!#*") {
     console.log("✅ Login erfolgreich")
     res.json({ success: true, token: "authenticated" })
   } else {
     console.log("❌ Login fehlgeschlagen")
     res.status(401).json({ success: false, message: "Ungültige Anmeldedaten" })
+  }
+})
+
+// RESET RSVPs - NUR mit Admin-Passwort
+app.post("/api/admin/reset", async (req, res) => {
+  const { password } = req.body
+
+  console.log("🗑️ Reset-Versuch...")
+
+  // Passwort prüfen
+  if (password !== "wedding2026") {
+    console.log("❌ Falsches Passwort")
+    return res.status(401).json({ error: "Unauthorized" })
+  }
+
+  try {
+    await fs.writeFile(DATA_FILE, JSON.stringify([], null, 2))
+    console.log("✅ RSVPs zurückgesetzt")
+    res.json({ success: true, message: "RSVPs erfolgreich zurückgesetzt" })
+  } catch (error) {
+    console.error("❌ Fehler beim Zurücksetzen:", error)
+    res.status(500).json({ error: "Fehler beim Zurücksetzen" })
   }
 })
 
