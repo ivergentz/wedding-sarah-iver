@@ -15,6 +15,8 @@ app.use(
       "http://localhost:3001",
       "https://sarahiver.de", // DEINE echte Domain!
       "https://www.sarahiver.de", // Mit www
+      "https://comfy-cendol-f93cb9.netlify.app",
+      "https://www.comfy-cendol-f93cb9.netlify.app",
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
