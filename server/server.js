@@ -5,8 +5,10 @@ const path = require("path")
 
 const app = express()
 const PORT = process.env.PORT || 5001
-const DATA_FILE = path.join(__dirname, "data", "rsvps.json")
-
+const DATA_FILE =
+  process.env.NODE_ENV === "production"
+    ? "/data/rsvps.json"
+    : path.join(__dirname, "data", "rsvps.json")
 // CORS Middleware - MUSS VOR allen anderen Middlewares kommen!
 app.use(
   cors({
@@ -21,7 +23,7 @@ app.use(
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
-  })
+  }),
 )
 
 // Body Parser Middleware
@@ -29,11 +31,17 @@ app.use(express.json())
 
 // Stelle sicher dass data Ordner existiert
 const ensureDataDir = async () => {
-  const dataDir = path.join(__dirname, "data")
+  // Bestimme den richtigen Pfad
+  const isProduction = process.env.NODE_ENV === "production"
+  const dataDir = isProduction ? "/data" : path.join(__dirname, "data")
+
   try {
     await fs.access(dataDir)
   } catch {
-    await fs.mkdir(dataDir)
+    // Nur lokal den Ordner erstellen - auf Render existiert /data bereits
+    if (!isProduction) {
+      await fs.mkdir(dataDir, { recursive: true })
+    }
   }
 
   try {
