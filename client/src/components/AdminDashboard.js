@@ -236,8 +236,10 @@ function AdminDashboard() {
   // Login Handler
   const handleLogin = (e) => {
     e.preventDefault()
-    // Einfache Client-Side Auth (für kleine Hochzeit ausreichend)
-    if (username === "Sarover" && password === "wedding2026!#*") {
+    const adminUser = process.env.REACT_APP_ADMIN_USER || ''
+    const adminPass = process.env.REACT_APP_ADMIN_PASS || ''
+    
+    if (username === adminUser && password === adminPass) {
       setIsAuthenticated(true)
       setError("")
     } else {
