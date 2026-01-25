@@ -11,7 +11,7 @@ export const addRSVP = async (rsvpData) => {
     .from('rsvps')
     .insert([{
       name: rsvpData.name,
-      email: rsvpData.email,
+      email: rsvpData.email || '',
       attending: rsvpData.attending,
       guests: parseInt(rsvpData.guests),
       message: rsvpData.message || '',
