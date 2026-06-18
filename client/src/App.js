@@ -8,6 +8,7 @@ import HeroSection from "./components/HeroSection"
 import Navigation from "./components/Navigation"
 import RSVPForm from "./components/RSVPForm"
 import AdminDashboard from "./components/AdminDashboard"
+import EssenFassen from "./components/EssenFassen"
 import GlobalStyles from "./styles/GlobalStyles"
 import { addRSVP } from "./config/supabase"
 
@@ -53,6 +54,15 @@ function App() {
       <Routes>
         <Route path="/" element={<MainPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
+        <Route
+          path="/essenfassen"
+          element={
+            <>
+              <GlobalStyles />
+              <EssenFassen />
+            </>
+          }
+        />
       </Routes>
     </Router>
   )
