@@ -355,7 +355,7 @@ function EssenFassen() {
         <Section>
           <Lead>
             Zeigt einfach euer <Highlight>Bändchen</Highlight> an der Theke und
-            holt euch, worauf ihr Bock habt. Geht aufs Haus.
+            sucht euch unten was aus, worauf ihr Bock habt. Geht aufs Haus.
           </Lead>
         </Section>
 
