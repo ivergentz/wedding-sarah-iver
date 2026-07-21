@@ -78,18 +78,7 @@ const Title = styled.h1`
   }
 `
 
-const Subtitle = styled.p`
-  font-size: 3rem;
-  font-weight: 700;
-  color: #fff;
-  margin-bottom: 2rem;
-  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.8), 0 0 30px rgba(0, 0, 0, 0.5);
-  letter-spacing: 0.1em;
 
-  @media (max-width: 768px) {
-    font-size: 2rem;
-  }
-`
 
 function HeroSection() {
   const image = HERO_IMAGE_URL || FALLBACK_IMAGE
@@ -98,7 +87,6 @@ function HeroSection() {
     <HeroContainer id='home' $image={image}>
       <ContentWrapper>
         <Title>DANKE.</Title>
-        <Subtitle>04/07/26 - AUF SANKT PAULI</Subtitle>
       </ContentWrapper>
     </HeroContainer>
   )
