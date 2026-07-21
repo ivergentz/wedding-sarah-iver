@@ -2,6 +2,11 @@
 // Prüft das Passwort (Env-Var PHOTOS_PASSWORD) und liefert die Liste
 // aller Hochzeitsfotos aus Cloudinary (per Tag, Env-Var CLOUDINARY_PHOTOS_TAG).
 //
+// Tag-Logik für den Tages-Filter:
+//   Tag "standesamt" vorhanden -> Standesamt (Freitag)
+//   Tag "standesamt" fehlt     -> Feier (Samstag)
+//   Die Samstagsbilder brauchen also KEINEN eigenen Tag.
+//
 // Bildgrößen:
 //   thumb    -> 300x300 (Galerie-Grid, klein & schnell)
 //   full     -> max. 1600px (Lightbox)
@@ -24,6 +29,7 @@ cloudinary.config({
 })
 
 const MAX_PHOTOS = 3000
+const STANDESAMT_TAG = "standesamt"
 
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
@@ -47,6 +53,7 @@ module.exports = async (req, res) => {
         resource_type: "image",
         max_results: 500,
         next_cursor: cursor,
+        tags: true, // Tag-Liste pro Bild mitliefern (für den Tages-Filter)
       })
       resources.push(...result.resources)
       cursor = result.next_cursor
@@ -59,6 +66,9 @@ module.exports = async (req, res) => {
 
     const photos = resources.map((r) => ({
       id: r.public_id,
+      // true = Standesamt (Freitag), false = Feier (Samstag)
+      standesamt:
+        Array.isArray(r.tags) && r.tags.includes(STANDESAMT_TAG),
       // Kleines Thumbnail fürs Grid – schnell zu laden
       thumb: cloudinary.url(r.public_id, {
         transformation: [

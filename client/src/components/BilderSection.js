@@ -1,9 +1,14 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import styled from "styled-components"
 
 // ============================================================
 // BILDER: Passwortgeschützte Galerie
 // - Passwort wird NUR serverseitig geprüft (/api/photos)
+// - Tages-Filter: ALLE / STANDESAMT / FEIER
+//   ("standesamt" = Bilder mit Tag "standesamt" in Cloudinary,
+//    "feier" = alle ohne diesen Tag – kein Nachtaggen nötig.
+//    Die Filter-Buttons erscheinen erst, wenn beide Gruppen
+//    existieren, also sobald Standesamt-Bilder hochgeladen sind.)
 // - Grid lädt erst 10 Bilder, weitere über "Mehr laden"
 // - Lightbox: Pfeile (Desktop), Wischen + Pfeile (Mobil),
 //   Nachbarbilder werden vorgeladen für flüssiges Blättern
@@ -126,6 +131,38 @@ const InfoText = styled.p`
   font-size: 1rem;
   margin-top: 1.5rem;
   line-height: 1.6;
+`
+
+/* ---------- Filter ---------- */
+
+const FilterBar = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-bottom: 2rem;
+`
+
+const FilterButton = styled.button`
+  background: ${(props) => (props.$active ? "#fff" : "#000")};
+  color: ${(props) => (props.$active ? "#000" : "#fff")};
+  border: 4px solid #fff;
+  padding: 0.75rem 1.5rem;
+  font-size: 1rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: 0.05em;
+
+  &:hover {
+    background: #fff;
+    color: #000;
+  }
+
+  @media (max-width: 768px) {
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
 `
 
 /* ---------- Galerie ---------- */
@@ -372,6 +409,12 @@ const LoadingText = styled.p`
 const STORAGE_KEY = "si_bilder_pw"
 const MIN_SWIPE_DISTANCE = 50
 
+const FILTERS = [
+  { key: "alle", label: "ALLE" },
+  { key: "standesamt", label: "STANDESAMT" },
+  { key: "feier", label: "FEIER" },
+]
+
 function BilderSection() {
   const [passwordInput, setPasswordInput] = useState("")
   const [password, setPassword] = useState(null) // verifiziertes Passwort
@@ -379,6 +422,7 @@ function BilderSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(new Set())
+  const [dayFilter, setDayFilter] = useState("alle")
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
   const [lightboxIndex, setLightboxIndex] = useState(null)
   const [lightboxLoaded, setLightboxLoaded] = useState(false)
@@ -387,6 +431,21 @@ function BilderSection() {
   // Touch-Swipe in der Lightbox
   const [touchStart, setTouchStart] = useState(null)
   const [touchEnd, setTouchEnd] = useState(null)
+
+  // Gefilterte Liste – Grundlage für Grid UND Lightbox
+  const filteredPhotos = useMemo(() => {
+    if (dayFilter === "standesamt") return photos.filter((p) => p.standesamt)
+    if (dayFilter === "feier") return photos.filter((p) => !p.standesamt)
+    return photos
+  }, [photos, dayFilter])
+
+  // Filter nur anzeigen, wenn es beide Gruppen gibt
+  const hasStandesamt = useMemo(
+    () => photos.some((p) => p.standesamt),
+    [photos]
+  )
+  const hasFeier = useMemo(() => photos.some((p) => !p.standesamt), [photos])
+  const showFilter = hasStandesamt && hasFeier
 
   const loadPhotos = useCallback(async (pw) => {
     setLoading(true)
@@ -435,6 +494,12 @@ function BilderSection() {
     if (passwordInput.trim()) {
       loadPhotos(passwordInput.trim())
     }
+  }
+
+  const changeFilter = (key) => {
+    setDayFilter(key)
+    setVisibleCount(INITIAL_VISIBLE)
+    setLightboxIndex(null)
   }
 
   const toggleSelect = (id) => {
@@ -496,13 +561,17 @@ function BilderSection() {
 
   const goToPrevious = useCallback(() => {
     setLightboxLoaded(false)
-    setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1))
-  }, [photos.length])
+    setLightboxIndex((prev) =>
+      prev > 0 ? prev - 1 : filteredPhotos.length - 1
+    )
+  }, [filteredPhotos.length])
 
   const goToNext = useCallback(() => {
     setLightboxLoaded(false)
-    setLightboxIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0))
-  }, [photos.length])
+    setLightboxIndex((prev) =>
+      prev < filteredPhotos.length - 1 ? prev + 1 : 0
+    )
+  }, [filteredPhotos.length])
 
   // Tastatur-Navigation
   useEffect(() => {
@@ -520,10 +589,11 @@ function BilderSection() {
 
   // Nachbarbilder vorladen, damit Blättern flüssig ist
   useEffect(() => {
-    if (lightboxIndex === null || photos.length === 0) return
+    if (lightboxIndex === null || filteredPhotos.length === 0) return
 
     const preload = (idx) => {
-      const photo = photos[(idx + photos.length) % photos.length]
+      const photo =
+        filteredPhotos[(idx + filteredPhotos.length) % filteredPhotos.length]
       if (photo) {
         const img = new Image()
         img.src = photo.full
@@ -532,7 +602,7 @@ function BilderSection() {
 
     preload(lightboxIndex + 1)
     preload(lightboxIndex - 1)
-  }, [lightboxIndex, photos])
+  }, [lightboxIndex, filteredPhotos])
 
   // Body-Scroll sperren, solange die Lightbox offen ist
   useEffect(() => {
@@ -596,9 +666,10 @@ function BilderSection() {
     )
   }
 
-  const visiblePhotos = photos.slice(0, visibleCount)
-  const hasMore = visibleCount < photos.length
-  const currentPhoto = lightboxIndex !== null ? photos[lightboxIndex] : null
+  const visiblePhotos = filteredPhotos.slice(0, visibleCount)
+  const hasMore = visibleCount < filteredPhotos.length
+  const currentPhoto =
+    lightboxIndex !== null ? filteredPhotos[lightboxIndex] : null
   const currentSelected = currentPhoto && selected.has(currentPhoto.id)
 
   // Freigeschaltet
@@ -617,6 +688,20 @@ function BilderSection() {
               alles als ZIP in voller Qualität. Danach könnt ihr direkt die
               nächsten auswählen.
             </Text>
+
+            {showFilter && (
+              <FilterBar>
+                {FILTERS.map((f) => (
+                  <FilterButton
+                    key={f.key}
+                    $active={dayFilter === f.key}
+                    onClick={() => changeFilter(f.key)}
+                  >
+                    {f.label}
+                  </FilterButton>
+                ))}
+              </FilterBar>
+            )}
 
             <Toolbar>
               <SelectionCounter $full={selected.size >= MAX_SELECTION}>
@@ -671,11 +756,11 @@ function BilderSection() {
                 <GhostButton
                   onClick={() =>
                     setVisibleCount((prev) =>
-                      Math.min(prev + LOAD_STEP, photos.length)
+                      Math.min(prev + LOAD_STEP, filteredPhotos.length)
                     )
                   }
                 >
-                  MEHR LADEN ({visibleCount} / {photos.length})
+                  MEHR LADEN ({visibleCount} / {filteredPhotos.length})
                 </GhostButton>
               </LoadMoreWrapper>
             )}
@@ -698,7 +783,7 @@ function BilderSection() {
             onTouchEnd={onTouchEnd}
           >
             <LightboxCounter>
-              {lightboxIndex + 1} / {photos.length}
+              {lightboxIndex + 1} / {filteredPhotos.length}
             </LightboxCounter>
             <CloseButton onClick={() => setLightboxIndex(null)}>✕</CloseButton>
             <SideNavButton
