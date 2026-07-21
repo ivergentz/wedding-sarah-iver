@@ -1,5 +1,10 @@
+import { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
-import { GOOGLE_PHOTOS_ALBUM_URL } from "../config/photos"
+
+// ============================================================
+// BILDER: Passwortgeschützte Galerie mit Download
+// Passwort wird NUR serverseitig geprüft (/api/photos).
+// ============================================================
 
 const BilderContainer = styled.section`
   padding: 5rem 2rem;
@@ -8,7 +13,7 @@ const BilderContainer = styled.section`
 `
 
 const Inner = styled.div`
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
   text-align: center;
 `
@@ -26,25 +31,197 @@ const SectionTitle = styled.h2`
 const Text = styled.p`
   font-size: 1.25rem;
   line-height: 1.7;
-  margin-bottom: 3rem;
+  margin-bottom: 2.5rem;
+  max-width: 700px;
+  margin-left: auto;
+  margin-right: auto;
 
   @media (max-width: 768px) {
     font-size: 1.1rem;
   }
 `
 
-const AlbumButton = styled.a`
-  display: inline-block;
+/* ---------- Passwort-Gate ---------- */
+
+const PasswordForm = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+`
+
+const PasswordInput = styled.input`
+  padding: 1rem 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 900;
+  border: 4px solid #fff;
+  background: #000;
+  color: #fff;
+  text-align: center;
+  letter-spacing: 0.3em;
+  width: 220px;
+
+  &::placeholder {
+    color: #666;
+    letter-spacing: 0.1em;
+    font-weight: 400;
+    font-size: 1.1rem;
+  }
+
+  &:focus {
+    outline: none;
+    background: #111;
+  }
+`
+
+const ActionButton = styled.button`
   background: #fff;
   color: #000;
   border: 4px solid #fff;
-  padding: 1.5rem 3rem;
-  font-size: 1.5rem;
+  padding: 1rem 2rem;
+  font-size: 1.25rem;
   font-weight: 900;
-  text-decoration: none;
   cursor: pointer;
   transition: all 0.3s;
   letter-spacing: 0.05em;
+
+  &:hover:not(:disabled) {
+    background: #000;
+    color: #fff;
+  }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+`
+
+const GhostButton = styled(ActionButton)`
+  background: #000;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: #fff;
+    color: #000;
+  }
+`
+
+const ErrorText = styled.p`
+  color: #ff4d4d;
+  font-weight: 900;
+  font-size: 1.1rem;
+  margin-top: 1.5rem;
+`
+
+const InfoText = styled.p`
+  color: #999;
+  font-size: 1rem;
+  margin-top: 1.5rem;
+  line-height: 1.6;
+`
+
+/* ---------- Galerie ---------- */
+
+const Toolbar = styled.div`
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 2.5rem;
+`
+
+const ImageGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 0.5rem;
+  }
+`
+
+const ImageCard = styled.div`
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 4px solid ${(props) => (props.$selected ? "#fff" : "#000")};
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s;
+
+  &:hover {
+    transform: scale(1.03);
+  }
+`
+
+const Thumb = styled.img`
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  filter: ${(props) => (props.$selected ? "brightness(0.6)" : "none")};
+`
+
+const SelectToggle = styled.button`
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2.25rem;
+  height: 2.25rem;
+  border: 3px solid #fff;
+  background: ${(props) => (props.$selected ? "#fff" : "rgba(0,0,0,0.5)")};
+  color: ${(props) => (props.$selected ? "#000" : "#fff")};
+  font-size: 1.25rem;
+  font-weight: 900;
+  cursor: pointer;
+  line-height: 1;
+`
+
+/* ---------- Lightbox ---------- */
+
+const Lightbox = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem;
+
+  @media (max-width: 768px) {
+    padding: 0;
+  }
+`
+
+const LightboxImage = styled.img`
+  max-width: 90%;
+  max-height: 80%;
+  object-fit: contain;
+  border: 4px solid #fff;
+
+  @media (max-width: 768px) {
+    max-width: 100%;
+    max-height: 75%;
+    border: none;
+  }
+`
+
+const CloseButton = styled.button`
+  position: absolute;
+  top: 2rem;
+  right: 2rem;
+  background: #fff;
+  color: #000;
+  border: 4px solid #fff;
+  padding: 1rem 1.5rem;
+  font-size: 1.5rem;
+  font-weight: 900;
+  cursor: pointer;
+  z-index: 10001;
 
   &:hover {
     background: #000;
@@ -52,40 +229,334 @@ const AlbumButton = styled.a`
   }
 
   @media (max-width: 768px) {
+    top: 1rem;
+    right: 1rem;
+    padding: 0.5rem 1rem;
     font-size: 1.25rem;
-    padding: 1.25rem 2rem;
   }
 `
 
-const Hint = styled.p`
-  font-size: 1rem;
-  color: #999;
-  margin-top: 2rem;
-  line-height: 1.6;
+const LightboxNavButton = styled.button`
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #fff;
+  color: #000;
+  border: 4px solid #fff;
+  padding: 1rem 1.5rem;
+  font-size: 2rem;
+  font-weight: 900;
+  cursor: pointer;
+  z-index: 10001;
+
+  ${(props) => props.$left && "left: 2rem;"}
+  ${(props) => props.$right && "right: 2rem;"}
+
+  &:hover {
+    background: #000;
+    color: #fff;
+  }
+
+  @media (max-width: 768px) {
+    display: none;
+  }
 `
 
+const LightboxBar = styled.div`
+  position: absolute;
+  bottom: 2rem;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  z-index: 10001;
+  flex-wrap: wrap;
+  padding: 0 1rem;
+`
+
+const DownloadLink = styled.a`
+  display: inline-block;
+  background: #fff;
+  color: #000;
+  border: 4px solid #fff;
+  padding: 0.75rem 1.5rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.3s;
+
+  &:hover {
+    background: #000;
+    color: #fff;
+  }
+`
+
+const LoadingText = styled.p`
+  font-size: 1.25rem;
+  font-weight: 900;
+  color: #fff;
+`
+
+const STORAGE_KEY = "si_bilder_pw"
+
 function BilderSection() {
+  const [passwordInput, setPasswordInput] = useState("")
+  const [password, setPassword] = useState(null) // verifiziertes Passwort
+  const [photos, setPhotos] = useState([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+  const [selected, setSelected] = useState(new Set())
+  const [lightboxIndex, setLightboxIndex] = useState(null)
+  const [zipLoading, setZipLoading] = useState(false)
+
+  const loadPhotos = useCallback(async (pw) => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/photos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw }),
+      })
+
+      if (res.status === 401) {
+        sessionStorage.removeItem(STORAGE_KEY)
+        setPassword(null)
+        setError("FALSCHES PASSWORT")
+        return
+      }
+
+      if (!res.ok) {
+        throw new Error("Serverfehler")
+      }
+
+      const data = await res.json()
+      setPhotos(data.photos || [])
+      setPassword(pw)
+      sessionStorage.setItem(STORAGE_KEY, pw)
+    } catch (err) {
+      setError("BILDER KONNTEN NICHT GELADEN WERDEN. BITTE SPÄTER NOCHMAL VERSUCHEN.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  // Passwort aus der Session wiederverwenden (z. B. nach Reload)
+  useEffect(() => {
+    const stored = sessionStorage.getItem(STORAGE_KEY)
+    if (stored) {
+      loadPhotos(stored)
+    }
+  }, [loadPhotos])
+
+  const handleUnlock = () => {
+    if (passwordInput.trim()) {
+      loadPhotos(passwordInput.trim())
+    }
+  }
+
+  const toggleSelect = (id) => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
+      return next
+    })
+  }
+
+  const startZipDownload = async (publicIds) => {
+    setZipLoading(true)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/download", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password, publicIds }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError((data.error || "DOWNLOAD FEHLGESCHLAGEN").toUpperCase())
+        return
+      }
+
+      window.location.assign(data.url)
+    } catch (err) {
+      setError("DOWNLOAD FEHLGESCHLAGEN. BITTE SPÄTER NOCHMAL VERSUCHEN.")
+    } finally {
+      setZipLoading(false)
+    }
+  }
+
+  const goToPrevious = () => {
+    setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1))
+  }
+
+  const goToNext = () => {
+    setLightboxIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0))
+  }
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setLightboxIndex(null)
+      if (e.key === "ArrowLeft") goToPrevious()
+      if (e.key === "ArrowRight") goToNext()
+    }
+
+    if (lightboxIndex !== null) {
+      window.addEventListener("keydown", handleKeyDown)
+      return () => window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [lightboxIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /* ---------- Render ---------- */
+
+  // Noch nicht freigeschaltet
+  if (!password) {
+    return (
+      <BilderContainer id='bilder'>
+        <Inner>
+          <SectionTitle>DIE BILDER</SectionTitle>
+          <Text>
+            Alle Fotos der Feier – zum Ansehen und Herunterladen. Gebt das
+            Passwort ein (ihr kennt es schon von der Anmeldung).
+          </Text>
+          <PasswordForm>
+            <PasswordInput
+              type='password'
+              inputMode='numeric'
+              placeholder='Passwort'
+              value={passwordInput}
+              onChange={(e) => setPasswordInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleUnlock()
+              }}
+            />
+            <ActionButton onClick={handleUnlock} disabled={loading}>
+              {loading ? "LÄDT..." : "ANSEHEN →"}
+            </ActionButton>
+          </PasswordForm>
+          {error && <ErrorText>{error}</ErrorText>}
+        </Inner>
+      </BilderContainer>
+    )
+  }
+
+  // Freigeschaltet
   return (
     <BilderContainer id='bilder'>
       <Inner>
         <SectionTitle>DIE BILDER</SectionTitle>
-        <Text>
-          Alle Fotos der Feier findet ihr in unserem Album. Dort könnt ihr
-          stöbern, einzelne Bilder auswählen oder gleich alles auf einmal
-          herunterladen.
-        </Text>
-        <AlbumButton
-          href={GOOGLE_PHOTOS_ALBUM_URL}
-          target='_blank'
-          rel='noopener noreferrer'
-        >
-          ZUM ALBUM →
-        </AlbumButton>
-        <Hint>
-          Tipp: Im Album oben rechts auf die drei Punkte tippen und „Alle
-          herunterladen" wählen – dann bekommt ihr alles als ZIP. Einzelne
-          Bilder: Bild öffnen → drei Punkte → „Herunterladen".
-        </Hint>
+
+        {loading ? (
+          <LoadingText>LADE BILDER...</LoadingText>
+        ) : (
+          <>
+            <Text>
+              Zum Vergrößern aufs Bild tippen. Mit dem ✓ oben rechts wählt ihr
+              Bilder aus – oder ihr ladet gleich alles als ZIP herunter.
+            </Text>
+
+            <Toolbar>
+              <ActionButton
+                onClick={() => startZipDownload(null)}
+                disabled={zipLoading || photos.length === 0}
+              >
+                {zipLoading ? "ERSTELLE ZIP..." : "ALLE HERUNTERLADEN (ZIP)"}
+              </ActionButton>
+              <GhostButton
+                onClick={() => startZipDownload(Array.from(selected))}
+                disabled={zipLoading || selected.size === 0}
+              >
+                AUSWAHL HERUNTERLADEN ({selected.size})
+              </GhostButton>
+            </Toolbar>
+
+            {error && <ErrorText>{error}</ErrorText>}
+
+            <ImageGrid>
+              {photos.map((photo, index) => {
+                const isSelected = selected.has(photo.id)
+                return (
+                  <ImageCard
+                    key={photo.id}
+                    $selected={isSelected}
+                    onClick={() => setLightboxIndex(index)}
+                  >
+                    <Thumb
+                      src={photo.thumb}
+                      alt={`Hochzeitsbild ${index + 1}`}
+                      loading='lazy'
+                      $selected={isSelected}
+                    />
+                    <SelectToggle
+                      $selected={isSelected}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleSelect(photo.id)
+                      }}
+                      aria-label={
+                        isSelected ? "Auswahl entfernen" : "Bild auswählen"
+                      }
+                    >
+                      ✓
+                    </SelectToggle>
+                  </ImageCard>
+                )
+              })}
+            </ImageGrid>
+
+            {photos.length === 0 && (
+              <InfoText>
+                Die Bilder der Fotografen sind noch nicht online – schaut bald
+                wieder vorbei!
+              </InfoText>
+            )}
+          </>
+        )}
+
+        {/* Lightbox */}
+        {lightboxIndex !== null && photos[lightboxIndex] && (
+          <Lightbox onClick={() => setLightboxIndex(null)}>
+            <CloseButton onClick={() => setLightboxIndex(null)}>✕</CloseButton>
+            <LightboxNavButton
+              $left
+              onClick={(e) => {
+                e.stopPropagation()
+                goToPrevious()
+              }}
+            >
+              ‹
+            </LightboxNavButton>
+            <LightboxImage
+              src={photos[lightboxIndex].full}
+              alt={`Hochzeitsbild ${lightboxIndex + 1}`}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <LightboxNavButton
+              $right
+              onClick={(e) => {
+                e.stopPropagation()
+                goToNext()
+              }}
+            >
+              ›
+            </LightboxNavButton>
+            <LightboxBar onClick={(e) => e.stopPropagation()}>
+              <DownloadLink href={photos[lightboxIndex].download}>
+                ⤓ ORIGINAL HERUNTERLADEN
+              </DownloadLink>
+            </LightboxBar>
+          </Lightbox>
+        )}
       </Inner>
     </BilderContainer>
   )
