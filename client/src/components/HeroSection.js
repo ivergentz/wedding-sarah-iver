@@ -27,7 +27,14 @@ const HeroContainer = styled.section`
     bottom: 0;
     background-image: url("${(props) => props.$image}");
     background-size: cover;
-    background-position: center;
+
+    /* Bildausschnitt: "center 20%" = horizontal mittig, vertikal auf
+       20% der Bildhoehe fokussiert, damit die Koepfe sichtbar bleiben.
+       Zum Feinjustieren nur die Prozentzahl aendern:
+       kleiner (z. B. 10%) = Ausschnitt weiter oben,
+       groesser (z. B. 35%) = Ausschnitt weiter unten. */
+    background-position: center 20%;
+
     background-repeat: no-repeat;
 
     /* Schwarz-Weiß Filter – Zeile löschen, wenn das Bild in Farbe sein soll */
