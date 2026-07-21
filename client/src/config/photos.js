@@ -1,108 +1,23 @@
-// Vercel Serverless Function: /api/photos
-// Prüft das Passwort (Env-Var PHOTOS_PASSWORD) und liefert die Liste
-// aller Hochzeitsfotos aus Cloudinary (per Tag, Env-Var CLOUDINARY_PHOTOS_TAG).
+// ============================================================
+// ZENTRALE KONFIGURATION – Danke-Seite
+// Nur HIER anpassen, sonst nirgends.
 //
-// Tag-Logik für den Tages-Filter:
-//   Tag "standesamt" vorhanden -> Standesamt (Freitag)
-//   Tag "standesamt" fehlt     -> Feier (Samstag)
-//   Die Samstagsbilder brauchen also KEINEN eigenen Tag.
-//
-// Bildgrößen:
-//   thumb    -> 300x300 (Galerie-Grid, klein & schnell)
-//   full     -> max. 1600px (Lightbox)
-//   download -> ORIGINAL in voller Qualität
-//
-// Benötigte Env-Variablen auf Vercel:
-//   PHOTOS_PASSWORD          -> das Download-Passwort
-//   CLOUDINARY_CLOUD_NAME    -> Cloud Name
-//   CLOUDINARY_API_KEY       -> API Key (Dashboard -> Settings -> API Keys)
-//   CLOUDINARY_API_SECRET    -> API Secret
-//   CLOUDINARY_PHOTOS_TAG    -> optional, Standard: "hochzeitsfotos"
+// WICHTIG: Das Download-Passwort steht NICHT hier und NICHT im
+// Frontend. Es liegt als Env-Variable PHOTOS_PASSWORD auf Vercel
+// und wird serverseitig in /api/photos und /api/download geprüft.
+// ============================================================
 
-const { v2: cloudinary } = require("cloudinary")
+// --- Hero-Bild (Cloudinary-URL) ---
+// Leer lassen = lokales Bild (/assets/gallery/hero.jpg).
+export const HERO_IMAGE_URL = ""
 
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-  secure: true,
-})
+// --- Cloudinary Gäste-Upload ---
+// Preset: Settings -> Upload -> Upload presets -> "hochzeit_gaeste"
+//   -> Signing Mode: "Unsigned"
+//   -> Asset folder: "hochzeit/gaeste-uploads"
+// Der Cloud Name ist öffentlich (steht in jeder Bild-URL) – das ist ok.
+export const CLOUDINARY_CLOUD_NAME = "si-weddings"
+export const CLOUDINARY_UPLOAD_PRESET = "hochzeit_gaeste"
 
-const MAX_PHOTOS = 3000
-const STANDESAMT_TAG = "standesamt"
-
-module.exports = async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" })
-  }
-
-  const password = (req.body && req.body.password) || ""
-
-  if (!process.env.PHOTOS_PASSWORD || password !== process.env.PHOTOS_PASSWORD) {
-    return res.status(401).json({ error: "Falsches Passwort" })
-  }
-
-  const tag = process.env.CLOUDINARY_PHOTOS_TAG || "hochzeitsfotos"
-
-  try {
-    const resources = []
-    let cursor
-
-    do {
-      const result = await cloudinary.api.resources_by_tag(tag, {
-        resource_type: "image",
-        max_results: 500,
-        next_cursor: cursor,
-        tags: true, // Tag-Liste pro Bild mitliefern (für den Tages-Filter)
-      })
-      resources.push(...result.resources)
-      cursor = result.next_cursor
-    } while (cursor && resources.length < MAX_PHOTOS)
-
-    // Nach Dateinamen sortieren (natürliche Sortierung: 2 vor 10 vor 100).
-    // Cloudinary hängt an den Namen einen Zufalls-Suffix an ("1_ofhqzm") –
-    // der stört die numerische Sortierung nicht.
-    // Bei gleichem Namen entscheidet der Upload-Zeitpunkt.
-    const nameOf = (r) => r.public_id.split("/").pop()
-    resources.sort((a, b) => {
-      const cmp = nameOf(a).localeCompare(nameOf(b), "de", {
-        numeric: true,
-        sensitivity: "base",
-      })
-      if (cmp !== 0) return cmp
-      return new Date(a.created_at) - new Date(b.created_at)
-    })
-
-    const photos = resources.map((r) => ({
-      id: r.public_id,
-      // true = Standesamt (Freitag), false = Feier (Samstag)
-      standesamt:
-        Array.isArray(r.tags) && r.tags.includes(STANDESAMT_TAG),
-      // Kleines Thumbnail fürs Grid – schnell zu laden
-      thumb: cloudinary.url(r.public_id, {
-        transformation: [
-          { width: 300, height: 300, crop: "fill", gravity: "auto" },
-          { quality: "auto" },
-          { fetch_format: "auto" },
-        ],
-      }),
-      // Lightbox-Ansicht – komprimiert, max. 1600px
-      full: cloudinary.url(r.public_id, {
-        transformation: [
-          { width: 1600, crop: "limit" },
-          { quality: "auto" },
-          { fetch_format: "auto" },
-        ],
-      }),
-      // Original als Download in voller Qualität
-      download: cloudinary.url(r.public_id, { flags: "attachment" }),
-    }))
-
-    return res.status(200).json({ photos })
-  } catch (err) {
-    console.error("Cloudinary error:", err)
-    return res
-      .status(500)
-      .json({ error: "Bilder konnten nicht geladen werden" })
-  }
-}
+// Max. Dateigröße pro Upload in MB (Cloudinary Free: 10 MB Bilder, 100 MB Videos)
+export const MAX_FILE_SIZE_MB = 100

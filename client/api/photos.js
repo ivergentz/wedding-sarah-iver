@@ -59,10 +59,19 @@ module.exports = async (req, res) => {
       cursor = result.next_cursor
     } while (cursor && resources.length < MAX_PHOTOS)
 
-    // Chronologisch sortieren (älteste zuerst)
-    resources.sort(
-      (a, b) => new Date(a.created_at) - new Date(b.created_at)
-    )
+    // Nach Dateinamen sortieren (natürliche Sortierung: 2 vor 10 vor 100).
+    // Cloudinary hängt an den Namen einen Zufalls-Suffix an ("1_ofhqzm") –
+    // der stört die numerische Sortierung nicht.
+    // Bei gleichem Namen entscheidet der Upload-Zeitpunkt.
+    const nameOf = (r) => r.public_id.split("/").pop()
+    resources.sort((a, b) => {
+      const cmp = nameOf(a).localeCompare(nameOf(b), "de", {
+        numeric: true,
+        sensitivity: "base",
+      })
+      if (cmp !== 0) return cmp
+      return new Date(a.created_at) - new Date(b.created_at)
+    })
 
     const photos = resources.map((r) => ({
       id: r.public_id,
