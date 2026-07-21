@@ -4,11 +4,15 @@ import styled from "styled-components"
 // ============================================================
 // BILDER: Passwortgeschützte Galerie
 // - Passwort wird NUR serverseitig geprüft (/api/photos)
-// - Gäste wählen bis zu 15 Bilder aus und laden sie als ZIP
-// - Es gibt bewusst KEINEN "alle herunterladen"-Button
+// - Grid lädt erst 10 Bilder, weitere über "Mehr laden"
+// - Lightbox: Pfeile (Desktop), Wischen + Pfeile (Mobil),
+//   Nachbarbilder werden vorgeladen für flüssiges Blättern
+// - Auswahl bis 15 Bilder, Download als ZIP in Originalqualität
 // ============================================================
 
 const MAX_SELECTION = 15
+const INITIAL_VISIBLE = 10 // Bilder beim ersten Laden
+const LOAD_STEP = 30 // Bilder pro Klick auf "Mehr laden"
 
 const BilderContainer = styled.section`
   padding: 5rem 2rem;
@@ -100,6 +104,16 @@ const ActionButton = styled.button`
   }
 `
 
+const GhostButton = styled(ActionButton)`
+  background: #000;
+  color: #fff;
+
+  &:hover:not(:disabled) {
+    background: #fff;
+    color: #000;
+  }
+`
+
 const ErrorText = styled.p`
   color: #ff4d4d;
   font-weight: 900;
@@ -184,6 +198,10 @@ const SelectToggle = styled.button`
   line-height: 1;
 `
 
+const LoadMoreWrapper = styled.div`
+  margin-top: 2.5rem;
+`
+
 /* ---------- Lightbox ---------- */
 
 const Lightbox = styled.div`
@@ -209,11 +227,29 @@ const LightboxImage = styled.img`
   max-height: 80%;
   object-fit: contain;
   border: 4px solid #fff;
+  opacity: ${(props) => (props.$loaded ? 1 : 0.3)};
+  transition: opacity 0.2s;
 
   @media (max-width: 768px) {
     max-width: 100%;
-    max-height: 75%;
+    max-height: 70%;
     border: none;
+  }
+`
+
+const LightboxCounter = styled.div`
+  position: absolute;
+  top: 2rem;
+  left: 2rem;
+  font-size: 1.1rem;
+  font-weight: 900;
+  color: #fff;
+  z-index: 10001;
+  letter-spacing: 0.05em;
+
+  @media (max-width: 768px) {
+    top: 1rem;
+    left: 1rem;
   }
 `
 
@@ -243,7 +279,8 @@ const CloseButton = styled.button`
   }
 `
 
-const LightboxNavButton = styled.button`
+// Seitliche Pfeile – nur Desktop
+const SideNavButton = styled.button`
   position: absolute;
   top: 50%;
   transform: translateY(-50%);
@@ -276,10 +313,32 @@ const LightboxBar = styled.div`
   right: 0;
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 1rem;
   z-index: 10001;
   flex-wrap: wrap;
   padding: 0 1rem;
+
+  @media (max-width: 768px) {
+    bottom: 1.5rem;
+  }
+`
+
+// Pfeile in der unteren Leiste – nur Mobil
+const BarNavButton = styled.button`
+  display: none;
+
+  @media (max-width: 768px) {
+    display: inline-block;
+    background: #fff;
+    color: #000;
+    border: 4px solid #fff;
+    padding: 0.75rem 1.25rem;
+    font-size: 1.5rem;
+    font-weight: 900;
+    cursor: pointer;
+    line-height: 1;
+  }
 `
 
 const LightboxSelectButton = styled.button`
@@ -297,6 +356,11 @@ const LightboxSelectButton = styled.button`
     opacity: 0.4;
     cursor: not-allowed;
   }
+
+  @media (max-width: 768px) {
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+  }
 `
 
 const LoadingText = styled.p`
@@ -306,6 +370,7 @@ const LoadingText = styled.p`
 `
 
 const STORAGE_KEY = "si_bilder_pw"
+const MIN_SWIPE_DISTANCE = 50
 
 function BilderSection() {
   const [passwordInput, setPasswordInput] = useState("")
@@ -314,8 +379,14 @@ function BilderSection() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [selected, setSelected] = useState(new Set())
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE)
   const [lightboxIndex, setLightboxIndex] = useState(null)
+  const [lightboxLoaded, setLightboxLoaded] = useState(false)
   const [zipLoading, setZipLoading] = useState(false)
+
+  // Touch-Swipe in der Lightbox
+  const [touchStart, setTouchStart] = useState(null)
+  const [touchEnd, setTouchEnd] = useState(null)
 
   const loadPhotos = useCallback(async (pw) => {
     setLoading(true)
@@ -418,14 +489,22 @@ function BilderSection() {
     }
   }
 
-  const goToPrevious = () => {
+  const openLightbox = (index) => {
+    setLightboxLoaded(false)
+    setLightboxIndex(index)
+  }
+
+  const goToPrevious = useCallback(() => {
+    setLightboxLoaded(false)
     setLightboxIndex((prev) => (prev > 0 ? prev - 1 : photos.length - 1))
-  }
+  }, [photos.length])
 
-  const goToNext = () => {
+  const goToNext = useCallback(() => {
+    setLightboxLoaded(false)
     setLightboxIndex((prev) => (prev < photos.length - 1 ? prev + 1 : 0))
-  }
+  }, [photos.length])
 
+  // Tastatur-Navigation
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.key === "Escape") setLightboxIndex(null)
@@ -437,7 +516,52 @@ function BilderSection() {
       window.addEventListener("keydown", handleKeyDown)
       return () => window.removeEventListener("keydown", handleKeyDown)
     }
-  }, [lightboxIndex]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lightboxIndex, goToPrevious, goToNext])
+
+  // Nachbarbilder vorladen, damit Blättern flüssig ist
+  useEffect(() => {
+    if (lightboxIndex === null || photos.length === 0) return
+
+    const preload = (idx) => {
+      const photo = photos[(idx + photos.length) % photos.length]
+      if (photo) {
+        const img = new Image()
+        img.src = photo.full
+      }
+    }
+
+    preload(lightboxIndex + 1)
+    preload(lightboxIndex - 1)
+  }, [lightboxIndex, photos])
+
+  // Body-Scroll sperren, solange die Lightbox offen ist
+  useEffect(() => {
+    if (lightboxIndex !== null) {
+      document.body.style.overflow = "hidden"
+      return () => {
+        document.body.style.overflow = ""
+      }
+    }
+  }, [lightboxIndex])
+
+  // Touch-Swipe Handler
+  const onTouchStart = (e) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const onTouchEnd = () => {
+    if (touchStart === null || touchEnd === null) return
+    const distance = touchStart - touchEnd
+    if (distance > MIN_SWIPE_DISTANCE) goToNext()
+    if (distance < -MIN_SWIPE_DISTANCE) goToPrevious()
+    setTouchStart(null)
+    setTouchEnd(null)
+  }
 
   /* ---------- Render ---------- */
 
@@ -472,6 +596,8 @@ function BilderSection() {
     )
   }
 
+  const visiblePhotos = photos.slice(0, visibleCount)
+  const hasMore = visibleCount < photos.length
   const currentPhoto = lightboxIndex !== null ? photos[lightboxIndex] : null
   const currentSelected = currentPhoto && selected.has(currentPhoto.id)
 
@@ -488,7 +614,8 @@ function BilderSection() {
             <Text>
               Sucht euch eure Lieblingsbilder aus: Mit dem ✓ auswählen (bis zu{" "}
               {MAX_SELECTION} auf einmal), dann herunterladen – ihr bekommt
-              alles als ZIP. Danach könnt ihr direkt die nächsten auswählen.
+              alles als ZIP in voller Qualität. Danach könnt ihr direkt die
+              nächsten auswählen.
             </Text>
 
             <Toolbar>
@@ -508,13 +635,13 @@ function BilderSection() {
             {error && <ErrorText>{error}</ErrorText>}
 
             <ImageGrid>
-              {photos.map((photo, index) => {
+              {visiblePhotos.map((photo, index) => {
                 const isSelected = selected.has(photo.id)
                 return (
                   <ImageCard
                     key={photo.id}
                     $selected={isSelected}
-                    onClick={() => setLightboxIndex(index)}
+                    onClick={() => openLightbox(index)}
                   >
                     <Thumb
                       src={photo.thumb}
@@ -539,6 +666,20 @@ function BilderSection() {
               })}
             </ImageGrid>
 
+            {hasMore && (
+              <LoadMoreWrapper>
+                <GhostButton
+                  onClick={() =>
+                    setVisibleCount((prev) =>
+                      Math.min(prev + LOAD_STEP, photos.length)
+                    )
+                  }
+                >
+                  MEHR LADEN ({visibleCount} / {photos.length})
+                </GhostButton>
+              </LoadMoreWrapper>
+            )}
+
             {photos.length === 0 && (
               <InfoText>
                 Die Bilder der Fotografen sind noch nicht online – schaut bald
@@ -550,9 +691,17 @@ function BilderSection() {
 
         {/* Lightbox */}
         {currentPhoto && (
-          <Lightbox onClick={() => setLightboxIndex(null)}>
+          <Lightbox
+            onClick={() => setLightboxIndex(null)}
+            onTouchStart={onTouchStart}
+            onTouchMove={onTouchMove}
+            onTouchEnd={onTouchEnd}
+          >
+            <LightboxCounter>
+              {lightboxIndex + 1} / {photos.length}
+            </LightboxCounter>
             <CloseButton onClick={() => setLightboxIndex(null)}>✕</CloseButton>
-            <LightboxNavButton
+            <SideNavButton
               $left
               onClick={(e) => {
                 e.stopPropagation()
@@ -560,13 +709,16 @@ function BilderSection() {
               }}
             >
               ‹
-            </LightboxNavButton>
+            </SideNavButton>
             <LightboxImage
+              key={currentPhoto.id}
               src={currentPhoto.full}
               alt={`Hochzeitsbild ${lightboxIndex + 1}`}
               onClick={(e) => e.stopPropagation()}
+              onLoad={() => setLightboxLoaded(true)}
+              $loaded={lightboxLoaded}
             />
-            <LightboxNavButton
+            <SideNavButton
               $right
               onClick={(e) => {
                 e.stopPropagation()
@@ -574,8 +726,9 @@ function BilderSection() {
               }}
             >
               ›
-            </LightboxNavButton>
+            </SideNavButton>
             <LightboxBar onClick={(e) => e.stopPropagation()}>
+              <BarNavButton onClick={goToPrevious}>‹</BarNavButton>
               <LightboxSelectButton
                 $selected={currentSelected}
                 onClick={() => toggleSelect(currentPhoto.id)}
@@ -583,6 +736,7 @@ function BilderSection() {
               >
                 {currentSelected ? "✓ AUSGEWÄHLT" : "AUSWÄHLEN"}
               </LightboxSelectButton>
+              <BarNavButton onClick={goToNext}>›</BarNavButton>
             </LightboxBar>
           </Lightbox>
         )}

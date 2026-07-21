@@ -1,7 +1,13 @@
-import { useState, useEffect, useCallback } from "react"
+import { useState, useCallback } from "react"
 import styled from "styled-components"
-import { getRSVPs } from "../config/supabase"
 import GlobalStyles from "../styles/GlobalStyles"
+
+// ============================================================
+// ADMIN: Gäste-Bilder & -Videos
+// Der frühere RSVP-Bereich wird nach der Hochzeit nicht mehr
+// gebraucht und wurde entfernt. Die RSVPs liegen weiterhin
+// unangetastet in Supabase.
+// ============================================================
 
 const AdminContainer = styled.div`
   min-height: 100vh;
@@ -98,11 +104,12 @@ const Button = styled.button`
 `
 
 const ErrorMessage = styled.div`
+  max-width: 1200px;
+  margin: 0 auto 2rem;
   padding: 1rem;
   background-color: #dc2626;
   color: #fff;
   font-weight: 700;
-  margin-bottom: 1rem;
   text-align: center;
 `
 
@@ -173,75 +180,6 @@ const DangerButton = styled(ActionButton)`
   }
 `
 
-const TableContainer = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  overflow-x: auto;
-`
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  border: 2px solid #fff;
-`
-
-const Th = styled.th`
-  padding: 1rem;
-  text-align: left;
-  font-weight: 900;
-  font-size: 0.875rem;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  border-bottom: 2px solid #fff;
-  background-color: #111;
-`
-
-const Td = styled.td`
-  padding: 1rem;
-  border-bottom: 1px solid #333;
-  font-size: 0.875rem;
-  vertical-align: top;
-`
-
-const StatusBadge = styled.span`
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  background-color: ${props => props.$attending ? '#22c55e' : '#ef4444'};
-  color: #fff;
-`
-
-const MessageCell = styled.div`
-  max-width: 300px;
-  word-wrap: break-word;
-  font-style: italic;
-  color: #ccc;
-`
-
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 4rem 2rem;
-  border: 2px dashed #333;
-  color: #666;
-`
-
-/* ---------- Gäste-Bilder ---------- */
-
-const SectionDivider = styled.div`
-  max-width: 1200px;
-  margin: 4rem auto 2rem;
-  border-top: 4px solid #fff;
-  padding-top: 3rem;
-`
-
-const SectionHeading = styled.h2`
-  font-size: 1.5rem;
-  font-weight: 900;
-  margin-bottom: 1.5rem;
-`
-
 const HintBox = styled.div`
   max-width: 1200px;
   margin: 0 auto 2rem;
@@ -251,6 +189,15 @@ const HintBox = styled.div`
   font-size: 0.875rem;
   font-weight: 700;
   line-height: 1.6;
+`
+
+const EmptyState = styled.div`
+  max-width: 1200px;
+  margin: 0 auto;
+  text-align: center;
+  padding: 4rem 2rem;
+  border: 2px dashed #333;
+  color: #666;
 `
 
 const UploadGrid = styled.div`
@@ -291,6 +238,7 @@ const TypeBadge = styled.span`
   font-size: 0.65rem;
   font-weight: 900;
   padding: 0.15rem 0.4rem;
+  z-index: 1;
 `
 
 function formatBytes(bytes) {
@@ -304,8 +252,6 @@ function AdminDashboard() {
   const [password, setPassword] = useState("")
   const [adminPassword, setAdminPassword] = useState("") // für Server-APIs
   const [error, setError] = useState("")
-  const [rsvps, setRsvps] = useState([])
-  const [loading, setLoading] = useState(false)
 
   // Gäste-Bilder State
   const [uploads, setUploads] = useState([])
@@ -314,14 +260,6 @@ function AdminDashboard() {
   const [uploadsError, setUploadsError] = useState(null)
   const [pendingDelete, setPendingDelete] = useState(null) // Items des letzten Downloads
   const [deleting, setDeleting] = useState(false)
-
-  // RSVP laden
-  const loadRSVPs = async () => {
-    setLoading(true)
-    const data = await getRSVPs()
-    setRsvps(data)
-    setLoading(false)
-  }
 
   // Gäste-Uploads laden
   const loadUploads = useCallback(async (pw) => {
@@ -359,56 +297,20 @@ function AdminDashboard() {
     }
   }, [])
 
-  useEffect(() => {
-    if (isAuthenticated) {
-      loadRSVPs()
-      loadUploads(adminPassword)
-    }
-  }, [isAuthenticated]) // eslint-disable-line react-hooks/exhaustive-deps
-
   // Login Handler
   const handleLogin = (e) => {
     e.preventDefault()
     const adminUser = process.env.REACT_APP_ADMIN_USER || ''
     const adminPass = process.env.REACT_APP_ADMIN_PASS || ''
-    
+
     if (username === adminUser && password === adminPass) {
       setAdminPassword(password)
       setIsAuthenticated(true)
       setError("")
+      loadUploads(password)
     } else {
       setError("UNGÜLTIGE ANMELDEDATEN")
     }
-  }
-
-  // CSV Download
-  const downloadCSV = () => {
-    if (rsvps.length === 0) {
-      alert("Keine RSVPs zum Exportieren")
-      return
-    }
-
-    const headers = ["Name", "Email", "Status", "Personen", "Nachricht", "Datum"]
-    const csvContent = [
-      headers.join(";"),
-      ...rsvps.map((rsvp) =>
-        [
-          `"${rsvp.name}"`,
-          `"${rsvp.email}"`,
-          `"${rsvp.attending === 'yes' ? 'Zusage' : 'Absage'}"`,
-          rsvp.guests,
-          `"${(rsvp.message || "").replace(/"/g, '""')}"`,
-          `"${new Date(rsvp.created_at).toLocaleDateString('de-DE')}"`,
-        ].join(";")
-      ),
-    ].join("\n")
-
-    const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" })
-    const link = document.createElement("a")
-    const url = URL.createObjectURL(blob)
-    link.setAttribute("href", url)
-    link.setAttribute("download", `rsvps_${new Date().toISOString().split("T")[0]}.csv`)
-    link.click()
   }
 
   // Gäste-Uploads als ZIP herunterladen (Fotos ODER Videos)
@@ -483,16 +385,6 @@ function AdminDashboard() {
     }
   }
 
-  // Statistiken berechnen
-  const stats = {
-    total: rsvps.length,
-    attending: rsvps.filter(r => r.attending === "yes").length,
-    notAttending: rsvps.filter(r => r.attending === "no").length,
-    totalGuests: rsvps
-      .filter(r => r.attending === "yes")
-      .reduce((sum, r) => sum + (parseInt(r.guests) || 0), 0)
-  }
-
   const imageUploads = uploads.filter((u) => u.type === "image")
   const videoUploads = uploads.filter((u) => u.type === "video")
 
@@ -503,7 +395,7 @@ function AdminDashboard() {
         {!isAuthenticated ? (
           <LoginContainer>
             <LoginTitle>ADMIN LOGIN</LoginTitle>
-            {error && <ErrorMessage>{error}</ErrorMessage>}
+            {error && <ErrorMessage style={{ margin: "0 0 1rem" }}>{error}</ErrorMessage>}
             <form onSubmit={handleLogin}>
               <FormGroup>
                 <Label>BENUTZERNAME</Label>
@@ -529,96 +421,9 @@ function AdminDashboard() {
         ) : (
           <>
             <Header>
-              <Title>RSVP ÜBERSICHT</Title>
+              <Title>GÄSTE-BILDER & -VIDEOS</Title>
               <BackLink href="/">← ZUR WEBSITE</BackLink>
             </Header>
-
-            <StatsGrid>
-              <StatBox>
-                <StatNumber>{stats.total}</StatNumber>
-                <StatLabel>Antworten</StatLabel>
-              </StatBox>
-              <StatBox>
-                <StatNumber>{stats.attending}</StatNumber>
-                <StatLabel>Zusagen</StatLabel>
-              </StatBox>
-              <StatBox>
-                <StatNumber>{stats.notAttending}</StatNumber>
-                <StatLabel>Absagen</StatLabel>
-              </StatBox>
-              <StatBox>
-                <StatNumber>{stats.totalGuests}</StatNumber>
-                <StatLabel>Gäste insgesamt</StatLabel>
-              </StatBox>
-            </StatsGrid>
-
-            <ActionBar>
-              <ActionButton $primary onClick={downloadCSV}>
-                📥 CSV HERUNTERLADEN
-              </ActionButton>
-              <ActionButton onClick={loadRSVPs}>
-                🔄 AKTUALISIEREN
-              </ActionButton>
-              <ActionButton onClick={() => setIsAuthenticated(false)}>
-                🚪 ABMELDEN
-              </ActionButton>
-            </ActionBar>
-
-            <TableContainer>
-              {loading ? (
-                <EmptyState>Lade RSVPs...</EmptyState>
-              ) : rsvps.length === 0 ? (
-                <EmptyState>Noch keine RSVPs vorhanden</EmptyState>
-              ) : (
-                <Table>
-                  <thead>
-                    <tr>
-                      <Th>Name</Th>
-                      <Th>Status</Th>
-                      <Th>Personen</Th>
-                      <Th>Nachricht</Th>
-                      <Th>Datum</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rsvps.map((rsvp) => (
-                      <tr key={rsvp.id}>
-                        <Td>
-                          <strong>{rsvp.name}</strong>
-                          <br />
-                          <span style={{ color: '#666', fontSize: '0.75rem' }}>{rsvp.email}</span>
-                        </Td>
-                        <Td>
-                          <StatusBadge $attending={rsvp.attending === "yes"}>
-                            {rsvp.attending === "yes" ? "ZUSAGE" : "ABSAGE"}
-                          </StatusBadge>
-                        </Td>
-                        <Td>{rsvp.guests}</Td>
-                        <Td>
-                          <MessageCell>
-                            {rsvp.message || "-"}
-                          </MessageCell>
-                        </Td>
-                        <Td>
-                          {new Date(rsvp.created_at).toLocaleDateString('de-DE', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              )}
-            </TableContainer>
-
-            {/* ---------- GÄSTE-BILDER ---------- */}
-            <SectionDivider>
-              <SectionHeading>GÄSTE-BILDER & -VIDEOS</SectionHeading>
-            </SectionDivider>
 
             {uploadStats && (
               <StatsGrid>
@@ -662,6 +467,9 @@ function AdminDashboard() {
                     : `🗑 DOWNLOAD OK – JETZT LÖSCHEN (${pendingDelete.items.length})`}
                 </DangerButton>
               )}
+              <ActionButton onClick={() => setIsAuthenticated(false)}>
+                🚪 ABMELDEN
+              </ActionButton>
             </ActionBar>
 
             {pendingDelete && (
@@ -672,7 +480,7 @@ function AdminDashboard() {
               </HintBox>
             )}
 
-            {uploadsError && <ErrorMessage style={{ maxWidth: "1200px", margin: "0 auto 2rem" }}>{uploadsError}</ErrorMessage>}
+            {uploadsError && <ErrorMessage>{uploadsError}</ErrorMessage>}
 
             {uploadsLoading ? (
               <EmptyState>Lade Gäste-Uploads...</EmptyState>

@@ -2,6 +2,11 @@
 // Prüft das Passwort (Env-Var PHOTOS_PASSWORD) und liefert die Liste
 // aller Hochzeitsfotos aus Cloudinary (per Tag, Env-Var CLOUDINARY_PHOTOS_TAG).
 //
+// Bildgrößen:
+//   thumb    -> 300x300 (Galerie-Grid, klein & schnell)
+//   full     -> max. 1600px (Lightbox)
+//   download -> ORIGINAL in voller Qualität
+//
 // Benötigte Env-Variablen auf Vercel:
 //   PHOTOS_PASSWORD          -> das Download-Passwort
 //   CLOUDINARY_CLOUD_NAME    -> Cloud Name
@@ -54,23 +59,23 @@ module.exports = async (req, res) => {
 
     const photos = resources.map((r) => ({
       id: r.public_id,
-      // Thumbnail fürs Grid
+      // Kleines Thumbnail fürs Grid – schnell zu laden
       thumb: cloudinary.url(r.public_id, {
         transformation: [
-          { width: 600, height: 600, crop: "fill", gravity: "auto" },
+          { width: 300, height: 300, crop: "fill", gravity: "auto" },
           { quality: "auto" },
           { fetch_format: "auto" },
         ],
       }),
-      // Große Ansicht für die Lightbox
+      // Lightbox-Ansicht – komprimiert, max. 1600px
       full: cloudinary.url(r.public_id, {
         transformation: [
-          { width: 2000, crop: "limit" },
+          { width: 1600, crop: "limit" },
           { quality: "auto" },
           { fetch_format: "auto" },
         ],
       }),
-      // Original als Download (Content-Disposition: attachment)
+      // Original als Download in voller Qualität
       download: cloudinary.url(r.public_id, { flags: "attachment" }),
     }))
 
