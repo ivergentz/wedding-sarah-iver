@@ -1,4 +1,7 @@
 import styled from "styled-components"
+import { HERO_IMAGE_URL } from "../config/photos"
+
+const FALLBACK_IMAGE = "/assets/gallery/foto1.jpg"
 
 const HeroContainer = styled.section`
   position: relative;
@@ -20,7 +23,7 @@ const HeroContainer = styled.section`
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url("/assets/gallery/foto1.jpg");
+    background-image: url("${(props) => props.$image}");
     background-size: cover;
     background-position: center;
     background-repeat: no-repeat;
@@ -80,10 +83,12 @@ const Subtitle = styled.p`
 `
 
 function HeroSection() {
+  const image = HERO_IMAGE_URL || FALLBACK_IMAGE
+
   return (
-    <HeroContainer id='home'>
+    <HeroContainer id='home' $image={image}>
       <ContentWrapper>
-        <Title>SARAH & IVER</Title>
+        <Title>DANKE.</Title>
         <Subtitle>04/07/26 - AUF SANKT PAULI</Subtitle>
       </ContentWrapper>
     </HeroContainer>

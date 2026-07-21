@@ -148,14 +148,13 @@ function Navigation() {
         <Logo onClick={() => scrollToSection("home")}>S&I.</Logo>
 
         <DesktopMenu>
-          <NavButton onClick={() => scrollToSection("details")}>
-            FAKTEN
+          <NavButton onClick={() => scrollToSection("danke")}>DANKE</NavButton>
+          <NavButton onClick={() => scrollToSection("bilder")}>
+            BILDER
           </NavButton>
-          <NavButton onClick={() => scrollToSection("gallery")}>
-            GALERIE
+          <NavButton onClick={() => scrollToSection("upload")}>
+            EURE BILDER
           </NavButton>
-          <NavButton onClick={() => scrollToSection("faq")}>DETAILS</NavButton>
-          <NavButton onClick={() => scrollToSection("rsvp")}>RSVP</NavButton>
         </DesktopMenu>
 
         <MobileMenuButton onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
@@ -167,17 +166,14 @@ function Navigation() {
 
       {mobileMenuOpen && (
         <MobileMenuDropdown>
-          <MobileNavButton onClick={() => scrollToSection("details")}>
-            FAKTEN
+          <MobileNavButton onClick={() => scrollToSection("danke")}>
+            DANKE
           </MobileNavButton>
-          <MobileNavButton onClick={() => scrollToSection("gallery")}>
-            GALERIE
+          <MobileNavButton onClick={() => scrollToSection("bilder")}>
+            BILDER
           </MobileNavButton>
-          <MobileNavButton onClick={() => scrollToSection("faq")}>
-            DETAILS
-          </MobileNavButton>
-          <MobileNavButton onClick={() => scrollToSection("rsvp")}>
-            RSVP
+          <MobileNavButton onClick={() => scrollToSection("upload")}>
+            EURE BILDER
           </MobileNavButton>
         </MobileMenuDropdown>
       )}
