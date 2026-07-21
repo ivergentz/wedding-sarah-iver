@@ -57,7 +57,7 @@ function DankeSection() {
       <SectionTitle>VIELEN DANK!</SectionTitle>
       <TextBox>
         <Paragraph>
-          Danke, dass ihr Teil unserer Feier wart. Ihr habt diesen Tag zu dem
+          Schön, dass ihr Teil unserer Feier wart. Ihr habt diesen Tag zu dem
           gemacht, was er war: laut, herzlich, unvergesslich.
         </Paragraph>
         <Paragraph>
@@ -65,9 +65,9 @@ function DankeSection() {
           dafür, dass ihr mit uns bis in die Nacht gefeiert habt.
         </Paragraph>
         <Paragraph>
-          Hier findet ihr alle Bilder der Feier zum Ansehen und Herunterladen.
-          Und wenn ihr selbst Fotos oder Videos gemacht habt: Ladet sie unten
-          hoch – wir freuen uns über jedes einzelne!
+          Hier findet ihr alle Bilder der Hochzeit zum Ansehen und Herunterladen.
+          Und wenn ihr selbst Fotos oder Videos gemacht habt: Ladet sie einfach unten
+          hoch – wir freuen uns über jedes Einzelne!
         </Paragraph>
         <Signature>SARAH & IVER</Signature>
       </TextBox>
