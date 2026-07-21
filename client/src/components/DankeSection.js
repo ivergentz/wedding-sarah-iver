@@ -69,7 +69,7 @@ function DankeSection() {
           Und wenn ihr selbst Fotos oder Videos gemacht habt: Ladet sie einfach unten
           hoch – wir freuen uns über jedes Einzelne!
         </Paragraph>
-        <Signature>SARAH & IVER</Signature>
+        <Signature>SARAH & IVER BOHNES</Signature>
       </TextBox>
     </DankeContainer>
   )
