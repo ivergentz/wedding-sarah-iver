@@ -2,10 +2,14 @@
 // Prüft das Passwort (Env-Var PHOTOS_PASSWORD) und liefert die Liste
 // aller Hochzeitsfotos aus Cloudinary (per Tag, Env-Var CLOUDINARY_PHOTOS_TAG).
 //
+// SORTIERUNG: Nach echtem Aufnahmezeitpunkt aus den EXIF-Daten der
+// Kamera (Datum -> Stunde -> Minute -> Sekunde). Fotos ohne EXIF-Zeit
+// landen ans Ende. Bei gleicher Zeit (Serienbilder) entscheidet der
+// Dateiname (natürliche Sortierung), danach der Upload-Zeitpunkt.
+//
 // Tag-Logik für den Tages-Filter:
 //   Tag "standesamt" vorhanden -> Standesamt (Freitag)
 //   Tag "standesamt" fehlt     -> Feier (Samstag)
-//   Die Samstagsbilder brauchen also KEINEN eigenen Tag.
 //
 // Bildgrößen:
 //   thumb    -> 300x300 (Galerie-Grid, klein & schnell)
@@ -31,6 +35,26 @@ cloudinary.config({
 const MAX_PHOTOS = 3000
 const STANDESAMT_TAG = "standesamt"
 
+// EXIF-Zeit ("2026:07:04 15:42:03") -> Timestamp; null wenn nicht vorhanden
+function captureTime(r) {
+  const m = r.image_metadata || {}
+  const raw = m.DateTimeOriginal || m.CreateDate || m.DateTime
+  if (!raw || typeof raw !== "string") return null
+
+  const iso = raw
+    .trim()
+    .replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3")
+    .replace(" ", "T")
+
+  const t = Date.parse(iso)
+  return Number.isNaN(t) ? null : t
+}
+
+// Dateiname ohne Ordnerpfad (für die Fallback-Sortierung)
+function nameOf(r) {
+  return (r.public_id || "").split("/").pop()
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" })
@@ -45,31 +69,42 @@ module.exports = async (req, res) => {
   const tag = process.env.CLOUDINARY_PHOTOS_TAG || "hochzeitsfotos"
 
   try {
+    // Search-API statt Admin-Listing, weil nur sie die
+    // EXIF-Metadaten (Aufnahmezeitpunkt) mitliefern kann
     const resources = []
     let cursor
 
     do {
-      const result = await cloudinary.api.resources_by_tag(tag, {
-        resource_type: "image",
-        max_results: 500,
-        next_cursor: cursor,
-        tags: true, // Tag-Liste pro Bild mitliefern (für den Tages-Filter)
-      })
-      resources.push(...result.resources)
+      let query = cloudinary.search
+        .expression(`tags:${tag} AND resource_type:image`)
+        .with_field("image_metadata")
+        .with_field("tags")
+        .max_results(500)
+
+      if (cursor) {
+        query = query.next_cursor(cursor)
+      }
+
+      const result = await query.execute()
+      resources.push(...(result.resources || []))
       cursor = result.next_cursor
     } while (cursor && resources.length < MAX_PHOTOS)
 
-    // Nach Dateinamen sortieren (natürliche Sortierung: 2 vor 10 vor 100).
-    // Cloudinary hängt an den Namen einen Zufalls-Suffix an ("1_ofhqzm") –
-    // der stört die numerische Sortierung nicht.
-    // Bei gleichem Namen entscheidet der Upload-Zeitpunkt.
-    const nameOf = (r) => r.public_id.split("/").pop()
+    // Sortierung: Aufnahmezeit -> Dateiname (natürlich) -> Upload-Zeit
     resources.sort((a, b) => {
+      const ta = captureTime(a)
+      const tb = captureTime(b)
+
+      if (ta !== null && tb !== null && ta !== tb) return ta - tb
+      if (ta !== null && tb === null) return -1 // ohne EXIF ans Ende
+      if (ta === null && tb !== null) return 1
+
       const cmp = nameOf(a).localeCompare(nameOf(b), "de", {
         numeric: true,
         sensitivity: "base",
       })
       if (cmp !== 0) return cmp
+
       return new Date(a.created_at) - new Date(b.created_at)
     })
 
