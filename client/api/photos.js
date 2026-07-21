@@ -2,10 +2,12 @@
 // Prüft das Passwort (Env-Var PHOTOS_PASSWORD) und liefert die Liste
 // aller Hochzeitsfotos aus Cloudinary (per Tag, Env-Var CLOUDINARY_PHOTOS_TAG).
 //
-// SORTIERUNG: Nach echtem Aufnahmezeitpunkt aus den EXIF-Daten der
-// Kamera (Datum -> Stunde -> Minute -> Sekunde). Fotos ohne EXIF-Zeit
-// landen ans Ende. Bei gleicher Zeit (Serienbilder) entscheidet der
-// Dateiname (natürliche Sortierung), danach der Upload-Zeitpunkt.
+// SORTIERUNG:
+//   1. Nach Tag: Standesamt (Tag "standesamt") zuerst, dann Feier
+//   2. Innerhalb des Tages: fortlaufend nach Dateiname
+//      (natürliche Sortierung: 2 vor 10 vor 100; der Zufalls-Suffix
+//      von Cloudinary wie "1_ofhqzm" stört dabei nicht)
+//   3. Bei gleichem Namen entscheidet der Upload-Zeitpunkt
 //
 // Tag-Logik für den Tages-Filter:
 //   Tag "standesamt" vorhanden -> Standesamt (Freitag)
@@ -35,22 +37,7 @@ cloudinary.config({
 const MAX_PHOTOS = 3000
 const STANDESAMT_TAG = "standesamt"
 
-// EXIF-Zeit ("2026:07:04 15:42:03") -> Timestamp; null wenn nicht vorhanden
-function captureTime(r) {
-  const m = r.image_metadata || {}
-  const raw = m.DateTimeOriginal || m.CreateDate || m.DateTime
-  if (!raw || typeof raw !== "string") return null
-
-  const iso = raw
-    .trim()
-    .replace(/^(\d{4}):(\d{2}):(\d{2})/, "$1-$2-$3")
-    .replace(" ", "T")
-
-  const t = Date.parse(iso)
-  return Number.isNaN(t) ? null : t
-}
-
-// Dateiname ohne Ordnerpfad (für die Fallback-Sortierung)
+// Dateiname ohne Ordnerpfad
 function nameOf(r) {
   return (r.public_id || "").split("/").pop()
 }
@@ -69,35 +56,28 @@ module.exports = async (req, res) => {
   const tag = process.env.CLOUDINARY_PHOTOS_TAG || "hochzeitsfotos"
 
   try {
-    // Search-API statt Admin-Listing, weil nur sie die
-    // EXIF-Metadaten (Aufnahmezeitpunkt) mitliefern kann
     const resources = []
     let cursor
 
     do {
-      let query = cloudinary.search
-        .expression(`tags:${tag} AND resource_type:image`)
-        .with_field("image_metadata")
-        .with_field("tags")
-        .max_results(500)
-
-      if (cursor) {
-        query = query.next_cursor(cursor)
-      }
-
-      const result = await query.execute()
-      resources.push(...(result.resources || []))
+      const result = await cloudinary.api.resources_by_tag(tag, {
+        resource_type: "image",
+        max_results: 500,
+        next_cursor: cursor,
+        tags: true, // Tag-Liste pro Bild mitliefern (für Filter + Sortierung)
+      })
+      resources.push(...result.resources)
       cursor = result.next_cursor
     } while (cursor && resources.length < MAX_PHOTOS)
 
-    // Sortierung: Aufnahmezeit -> Dateiname (natürlich) -> Upload-Zeit
-    resources.sort((a, b) => {
-      const ta = captureTime(a)
-      const tb = captureTime(b)
+    const isStandesamt = (r) =>
+      Array.isArray(r.tags) && r.tags.includes(STANDESAMT_TAG)
 
-      if (ta !== null && tb !== null && ta !== tb) return ta - tb
-      if (ta !== null && tb === null) return -1 // ohne EXIF ans Ende
-      if (ta === null && tb !== null) return 1
+    // 1. Tag (Standesamt zuerst) -> 2. Dateiname -> 3. Upload-Zeit
+    resources.sort((a, b) => {
+      const dayA = isStandesamt(a) ? 0 : 1
+      const dayB = isStandesamt(b) ? 0 : 1
+      if (dayA !== dayB) return dayA - dayB
 
       const cmp = nameOf(a).localeCompare(nameOf(b), "de", {
         numeric: true,
@@ -111,8 +91,7 @@ module.exports = async (req, res) => {
     const photos = resources.map((r) => ({
       id: r.public_id,
       // true = Standesamt (Freitag), false = Feier (Samstag)
-      standesamt:
-        Array.isArray(r.tags) && r.tags.includes(STANDESAMT_TAG),
+      standesamt: isStandesamt(r),
       // Kleines Thumbnail fürs Grid – schnell zu laden
       thumb: cloudinary.url(r.public_id, {
         transformation: [
