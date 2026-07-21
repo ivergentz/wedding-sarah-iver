@@ -4,9 +4,10 @@
 //
 // SORTIERUNG:
 //   1. Nach Tag: Standesamt (Tag "standesamt") zuerst, dann Feier
-//   2. Innerhalb des Tages: fortlaufend nach Dateiname
-//      (natürliche Sortierung: 2 vor 10 vor 100; der Zufalls-Suffix
-//      von Cloudinary wie "1_ofhqzm" stört dabei nicht)
+//   2. Innerhalb des Tages: fortlaufend nach ANZEIGENAME (display_name =
+//      Original-Dateiname; natürliche Sortierung: 2 vor 10 vor 100).
+//      Die interne public_id ist nur Fallback, weil sie im
+//      Dynamic-folders-Modus eine Zufallskennung sein kann.
 //   3. Bei gleichem Namen entscheidet der Upload-Zeitpunkt
 //
 // Tag-Logik für den Tages-Filter:
@@ -37,8 +38,12 @@ cloudinary.config({
 const MAX_PHOTOS = 3000
 const STANDESAMT_TAG = "standesamt"
 
-// Dateiname ohne Ordnerpfad
+// Sortier-Name eines Bildes: bevorzugt der Anzeigename (display_name),
+// den Cloudinary im "Dynamic folders"-Modus aus dem Original-Dateinamen
+// bildet. Fallback: die interne public_id (kann je nach Upload-Weg eine
+// Zufallskennung sein und ist daher nur zweite Wahl).
 function nameOf(r) {
+  if (r.display_name) return r.display_name
   return (r.public_id || "").split("/").pop()
 }
 
