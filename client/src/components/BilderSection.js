@@ -2,9 +2,13 @@ import { useCallback, useEffect, useState } from "react"
 import styled from "styled-components"
 
 // ============================================================
-// BILDER: Passwortgeschützte Galerie mit Download
-// Passwort wird NUR serverseitig geprüft (/api/photos).
+// BILDER: Passwortgeschützte Galerie
+// - Passwort wird NUR serverseitig geprüft (/api/photos)
+// - Gäste wählen bis zu 15 Bilder aus und laden sie als ZIP
+// - Es gibt bewusst KEINEN "alle herunterladen"-Button
 // ============================================================
+
+const MAX_SELECTION = 15
 
 const BilderContainer = styled.section`
   padding: 5rem 2rem;
@@ -96,16 +100,6 @@ const ActionButton = styled.button`
   }
 `
 
-const GhostButton = styled(ActionButton)`
-  background: #000;
-  color: #fff;
-
-  &:hover:not(:disabled) {
-    background: #fff;
-    color: #000;
-  }
-`
-
 const ErrorText = styled.p`
   color: #ff4d4d;
   font-weight: 900;
@@ -123,11 +117,24 @@ const InfoText = styled.p`
 /* ---------- Galerie ---------- */
 
 const Toolbar = styled.div`
+  position: sticky;
+  top: 5.5rem;
+  z-index: 100;
   display: flex;
   justify-content: center;
-  gap: 1rem;
+  align-items: center;
+  gap: 1.5rem;
   flex-wrap: wrap;
   margin-bottom: 2.5rem;
+  background: #000;
+  padding: 1rem 0;
+`
+
+const SelectionCounter = styled.span`
+  font-size: 1.25rem;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  color: ${(props) => (props.$full ? "#ff4d4d" : "#fff")};
 `
 
 const ImageGrid = styled.div`
@@ -275,21 +282,20 @@ const LightboxBar = styled.div`
   padding: 0 1rem;
 `
 
-const DownloadLink = styled.a`
+const LightboxSelectButton = styled.button`
   display: inline-block;
-  background: #fff;
-  color: #000;
+  background: ${(props) => (props.$selected ? "#000" : "#fff")};
+  color: ${(props) => (props.$selected ? "#fff" : "#000")};
   border: 4px solid #fff;
   padding: 0.75rem 1.5rem;
   font-size: 1.1rem;
   font-weight: 900;
-  text-decoration: none;
   cursor: pointer;
   transition: all 0.3s;
 
-  &:hover {
-    background: #000;
-    color: #fff;
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 `
 
@@ -338,7 +344,9 @@ function BilderSection() {
       setPassword(pw)
       sessionStorage.setItem(STORAGE_KEY, pw)
     } catch (err) {
-      setError("BILDER KONNTEN NICHT GELADEN WERDEN. BITTE SPÄTER NOCHMAL VERSUCHEN.")
+      setError(
+        "BILDER KONNTEN NICHT GELADEN WERDEN. BITTE SPÄTER NOCHMAL VERSUCHEN."
+      )
     } finally {
       setLoading(false)
     }
@@ -359,18 +367,26 @@ function BilderSection() {
   }
 
   const toggleSelect = (id) => {
+    setError(null)
     setSelected((prev) => {
       const next = new Set(prev)
       if (next.has(id)) {
         next.delete(id)
       } else {
+        if (next.size >= MAX_SELECTION) {
+          setError(
+            `MAXIMAL ${MAX_SELECTION} BILDER PRO DOWNLOAD – ERST HERUNTERLADEN, DANN WEITER AUSWÄHLEN.`
+          )
+          return prev
+        }
         next.add(id)
       }
       return next
     })
   }
 
-  const startZipDownload = async (publicIds) => {
+  const startZipDownload = async () => {
+    if (selected.size === 0) return
     setZipLoading(true)
     setError(null)
 
@@ -378,7 +394,10 @@ function BilderSection() {
       const res = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password, publicIds }),
+        body: JSON.stringify({
+          password,
+          publicIds: Array.from(selected),
+        }),
       })
 
       const data = await res.json()
@@ -389,6 +408,9 @@ function BilderSection() {
       }
 
       window.location.assign(data.url)
+      // Auswahl nach Start des Downloads zurücksetzen,
+      // damit direkt die nächsten 15 gewählt werden können
+      setSelected(new Set())
     } catch (err) {
       setError("DOWNLOAD FEHLGESCHLAGEN. BITTE SPÄTER NOCHMAL VERSUCHEN.")
     } finally {
@@ -450,6 +472,9 @@ function BilderSection() {
     )
   }
 
+  const currentPhoto = lightboxIndex !== null ? photos[lightboxIndex] : null
+  const currentSelected = currentPhoto && selected.has(currentPhoto.id)
+
   // Freigeschaltet
   return (
     <BilderContainer id='bilder'>
@@ -461,23 +486,23 @@ function BilderSection() {
         ) : (
           <>
             <Text>
-              Zum Vergrößern aufs Bild tippen. Mit dem ✓ oben rechts wählt ihr
-              Bilder aus – oder ihr ladet gleich alles als ZIP herunter.
+              Sucht euch eure Lieblingsbilder aus: Mit dem ✓ auswählen (bis zu{" "}
+              {MAX_SELECTION} auf einmal), dann herunterladen – ihr bekommt
+              alles als ZIP. Danach könnt ihr direkt die nächsten auswählen.
             </Text>
 
             <Toolbar>
+              <SelectionCounter $full={selected.size >= MAX_SELECTION}>
+                {selected.size} / {MAX_SELECTION} AUSGEWÄHLT
+              </SelectionCounter>
               <ActionButton
-                onClick={() => startZipDownload(null)}
-                disabled={zipLoading || photos.length === 0}
-              >
-                {zipLoading ? "ERSTELLE ZIP..." : "ALLE HERUNTERLADEN (ZIP)"}
-              </ActionButton>
-              <GhostButton
-                onClick={() => startZipDownload(Array.from(selected))}
+                onClick={startZipDownload}
                 disabled={zipLoading || selected.size === 0}
               >
-                AUSWAHL HERUNTERLADEN ({selected.size})
-              </GhostButton>
+                {zipLoading
+                  ? "ERSTELLE ZIP..."
+                  : `HERUNTERLADEN (${selected.size})`}
+              </ActionButton>
             </Toolbar>
 
             {error && <ErrorText>{error}</ErrorText>}
@@ -524,7 +549,7 @@ function BilderSection() {
         )}
 
         {/* Lightbox */}
-        {lightboxIndex !== null && photos[lightboxIndex] && (
+        {currentPhoto && (
           <Lightbox onClick={() => setLightboxIndex(null)}>
             <CloseButton onClick={() => setLightboxIndex(null)}>✕</CloseButton>
             <LightboxNavButton
@@ -537,7 +562,7 @@ function BilderSection() {
               ‹
             </LightboxNavButton>
             <LightboxImage
-              src={photos[lightboxIndex].full}
+              src={currentPhoto.full}
               alt={`Hochzeitsbild ${lightboxIndex + 1}`}
               onClick={(e) => e.stopPropagation()}
             />
@@ -551,9 +576,13 @@ function BilderSection() {
               ›
             </LightboxNavButton>
             <LightboxBar onClick={(e) => e.stopPropagation()}>
-              <DownloadLink href={photos[lightboxIndex].download}>
-                ⤓ ORIGINAL HERUNTERLADEN
-              </DownloadLink>
+              <LightboxSelectButton
+                $selected={currentSelected}
+                onClick={() => toggleSelect(currentPhoto.id)}
+                disabled={!currentSelected && selected.size >= MAX_SELECTION}
+              >
+                {currentSelected ? "✓ AUSGEWÄHLT" : "AUSWÄHLEN"}
+              </LightboxSelectButton>
             </LightboxBar>
           </Lightbox>
         )}

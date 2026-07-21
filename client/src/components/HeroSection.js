@@ -1,7 +1,9 @@
 import styled from "styled-components"
 import { HERO_IMAGE_URL } from "../config/photos"
 
-const FALLBACK_IMAGE = "/assets/gallery/foto1.jpg"
+// Euer Hochzeitsfoto (liegt lokal unter public/assets/gallery/hero.jpg).
+// Alternativ kann in config/photos.js eine Cloudinary-URL gesetzt werden.
+const FALLBACK_IMAGE = "/assets/gallery/hero.jpg"
 
 const HeroContainer = styled.section`
   position: relative;
@@ -28,7 +30,7 @@ const HeroContainer = styled.section`
     background-position: center;
     background-repeat: no-repeat;
 
-    /* Schwarz-Weiß Filter */
+    /* Schwarz-Weiß Filter – Zeile löschen, wenn das Bild in Farbe sein soll */
     filter: grayscale(100%) brightness(0.9);
 
     z-index: 0;

@@ -188,6 +188,9 @@ function UploadSection() {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET)
+    // Tag, über den der Admin die Gäste-Uploads findet, herunterlädt
+    // und nach dem Sichern löscht (siehe /api/guest-uploads)
+    formData.append("tags", "gaeste-upload")
     if (guestName.trim()) {
       formData.append("context", `caption=${guestName.trim()}`)
     }
